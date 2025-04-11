@@ -173,6 +173,6 @@ def tracker_program(host, port):
         Thread(target=handle_peer, args=(conn, addr)).start()
 
 if __name__ == "__main__":
-    host = "192.168.1.4"
+    host = "10.229.5.204"
     port = 22236
     tracker_program(host, port)
