@@ -11,7 +11,7 @@ class Peer3LoginApp:
         self.root.geometry("300x200")
 
         # Cấu hình server (tracker)
-        self.server_ip = "10.229.5.204"  # Địa chỉ IP của tracker
+        self.server_ip = "192.168.227.241"  # Địa chỉ IP của tracker
         self.server_port = 22236     # Cổng của tracker
 
         self.peer_client = None
@@ -39,8 +39,8 @@ class Peer3LoginApp:
         username = self.username_entry.get()
         password = self.password_entry.get()
 
-        # Khởi tạo PeerClient cho peer3
-        self.peer_client = PeerClient(self.server_ip, self.server_port, self.get_host_ip(), 33359, username, password, "sid3")
+        # Khởi tạo PeerClient cho peer1
+        self.peer_client = PeerClient(self.server_ip, self.server_port, self.get_host_ip(), 33359, username, password, "sid1")
         response = self.peer_client.login_with_tracker(username, password)  # Đăng nhập với tracker
         print(response)
         if response == "Login successful":
@@ -55,7 +55,7 @@ class Peer3LoginApp:
         username = self.username_entry.get()
         password = self.password_entry.get()
 
-        self.peer_client = PeerClient(self.server_ip, self.server_port, self.get_host_ip(), 33359, username, password, "sid3")
+        self.peer_client = PeerClient(self.server_ip, self.server_port, self.get_host_ip(), 33359, username, password, "sid1")
 
         # Gọi server để đăng ký
         response = self.peer_client.register_with_tracker(username, password)
