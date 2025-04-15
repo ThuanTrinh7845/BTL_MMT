@@ -97,6 +97,12 @@ class Peer1MainApp:
         if selected:
             channel_id = self.channel_listbox.get(selected[0]).split()[0]
             self.current_channel = channel_id  # Cập nhật channel đang chọn
+
+            # if self.streaming_channel and self.streaming_channel != channel_id:
+            #     self.video_label.pack_forget()
+            #     # self.streaming_channel = None
+            #     self.stream_button.config(text="Bắt đầu Stream")
+
             if channel_id in self.peer_client.joined_channels or channel_id in self.peer_client.hosted_channels:
                 self.display_channel_history(channel_id)
                 self.message_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -108,14 +114,13 @@ class Peer1MainApp:
                     self.stream_button.pack_forget()
                 
                 # Kiểm tra hiển thị video
-                if channel_id == self.streaming_channel:  # Nếu là host và đang stream channel này
-                    self.video_label.pack(side=tk.TOP, padx=10, pady=10)
+                # if channel_id == self.streaming_channel:  # Nếu là host và đang stream channel này
+                #     self.video_label.pack(side=tk.TOP, padx=10, pady=10)
                     #print(f"Hiển thị video vì đang stream trên {channel_id}")
-                elif channel_id in self.peer_client.joined_channels:  # Nếu là joiner và channel đã tham gia
-                    self.video_label.pack(side=tk.TOP, padx=10, pady=10)
-                    print(f"cc")
-                else:
-                    self.video_label.pack_forget()
+                # if channel_id == self.streaming_channel or channel_id in self.peer_client.joined_channels:  # Nếu là joiner và channel đã tham gia
+                #     self.video_label.pack(side=tk.TOP, padx=10, pady=10)
+                # else:
+                #     self.video_label.pack_forget()
                     #print(f"Ẩn video vì không stream/nhận trên {channel_id}")
             else:
                 self.message_entry.pack_forget()
@@ -185,21 +190,21 @@ class Peer1MainApp:
                 self.video_label.pack(side=tk.TOP, padx=10, pady=10)
                 print(f"Bắt đầu stream trên {selected_channel}")
             else:
-                self.peer_client.stop_stream()
+                self.peer_client.stop_stream(selected_channel)
                 self.stream_button.config(text="Bắt đầu Stream")
                 self.streaming_channel = None
                 self.video_label.pack_forget()
-                print("Dừng stream")
+                print(f"Dừng stream trên {selected_channel}")
 
     def update_video(self):
         if self.current_channel:
-            # Trường hợp host: Hiển thị video nếu đang stream trên channel này
-            if self.current_channel == self.streaming_channel:
+            queues = self.peer_client.video_queues.get(self.current_channel)
+            if queues:
                 try:
-                    frame = self.peer_client.video_queue.get_nowait()
+                    frame = queues.get_nowait()
                     if frame is None:
-                        self.video_label.pack_forget()
-                        print("Ẩn video label vì stream dừng (host)")
+                        self.video_label.pack_forget()   # Dừng stream sẽ chạy dòng này để ẩn stream
+                        # del self.peer_client.video_queues[self.current_channel]
                     else:
                         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                         frame = cv2.resize(frame, (320, 240))
@@ -207,35 +212,14 @@ class Peer1MainApp:
                         imgtk = ImageTk.PhotoImage(image=img)
                         self.video_label.imgtk = imgtk
                         self.video_label.configure(image=imgtk)
-                        if not self.video_label.winfo_ismapped():  # Nếu chưa hiển thị, hiển thị lại
+                        if not self.video_label.winfo_ismapped():
                             self.video_label.pack(side=tk.TOP, padx=10, pady=10)
-                        print("Hiển thị frame trên GUI (host)")
-                except queue.Empty:
-                    pass
-            # Trường hợp joiner: Hiển thị video nếu channel đã tham gia
-            elif self.current_channel in self.peer_client.joined_channels:
-                try:
-                    frame = self.peer_client.video_queue.get_nowait()
-                    if frame is None:
-                        self.video_label.pack_forget()
-                        print("Ẩn video label vì stream dừng (joiner)")
-                    else:
-                        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                        frame = cv2.resize(frame, (320, 240))
-                        img = Image.fromarray(frame)
-                        imgtk = ImageTk.PhotoImage(image=img)
-                        self.video_label.imgtk = imgtk
-                        self.video_label.configure(image=imgtk)
-                        if not self.video_label.winfo_ismapped():  # Nếu chưa hiển thị, hiển thị lại
-                            self.video_label.pack(side=tk.TOP, padx=10, pady=10)
-                        print("Hiển thị frame trên GUI (joiner)")
                 except queue.Empty:
                     pass
             else:
-                self.video_label.pack_forget()
-                print(f"Ẩn video vì không stream/nhận trên {self.current_channel}")
+                self.video_label.pack_forget()   # chuyển kênh khác khi stream sẽ chạy dòng này để ẩn stream
         else:
-            self.video_label.pack_forget()  # Không có channel nào chọn
+            self.video_label.pack_forget()
         self.root.after(10, self.update_video)
 
     def on_closing(self):

@@ -11,7 +11,7 @@ class Peer1LoginApp:
         self.root.geometry("300x200")
 
         # Cấu hình server (tracker)
-        self.server_ip = "192.168.227.241"  # Địa chỉ IP của tracker
+        self.server_ip = "192.168.1.6"  # Địa chỉ IP của tracker
         self.server_port = 22236     # Cổng của tracker
 
         self.peer_client = None
