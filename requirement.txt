@@ -1,1 +1,1 @@
-opencv-python pyaudio Pillow
+opencv-python pyaudio Pillow tk Pillow numpy
