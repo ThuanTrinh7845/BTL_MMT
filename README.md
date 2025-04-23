@@ -19,7 +19,7 @@ Network Application P2P Segment Chat là một ứng dụng mạng ngang hàng (
   - Tracker quản lý người dùng, kênh và danh sách peer.
   - Mặc định chạy trên 192.168.227.241:22236. Chỉnh sửa địa chỉ IP và cổng trong tracker1.py nếu cần.
 - Khởi động peer:
-  ```
+  ```bash
   python peer1_login.py (trong thư mục peer1)
   python peer2_login.py (trong thư mục peer2)
   python peer3_login.py (trong thư mục peer3)
