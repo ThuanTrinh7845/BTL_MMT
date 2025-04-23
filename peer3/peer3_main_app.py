@@ -4,6 +4,7 @@ from tkinter import messagebox, scrolledtext
 import tkinter.simpledialog
 from PIL import Image, ImageTk
 import cv2
+from peer3_login import Peer3LoginApp
 
 class Peer3MainApp:
     def __init__(self, root, username, peer_client):
@@ -61,6 +62,9 @@ class Peer3MainApp:
         self.stream_button.pack(side=tk.RIGHT)
         self.stream_button.pack_forget()
 
+        self.logout_button = tk.Button(self.root, text="Log out", command=self.logout)
+        self.logout_button.place(x=600, y=10)
+
         self.check_queue()
         self.update_video()
 
@@ -68,6 +72,22 @@ class Peer3MainApp:
         self.current_channel = None   # Channel đang chọn
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+    def logout(self):
+        """Xử lý sự kiện khi nhấn nút Log out"""
+        if messagebox.askokcancel("Đăng xuất", "Bạn có chắc muốn đăng xuất?"):
+            if self.peer_client.streaming:
+                self.peer_client.stop_stream()
+            if self.peer_client.server_socket:
+                self.peer_client.server_socket.close()
+            self.root.destroy()
+            self.open_login_window()
+
+    def open_login_window(self):
+        """Mở lại giao diện đăng nhập từ peer1_login.py"""
+        login_root = tk.Tk()
+        login_app = Peer3LoginApp(login_root)
+        login_root.mainloop()
 
     def create_new_channel(self):
         channel_id = tk.simpledialog.askstring("Tạo kênh mới", "Nhập tên kênh:")
