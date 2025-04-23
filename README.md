@@ -3,6 +3,8 @@ Network Application P2P Segment Chat là một ứng dụng mạng ngang hàng (
 ## Cài đặt
 Để chạy **Network Application P2P Segment Chat**, làm theo các bước sau:
 - Sao chép kho lưu trữ:
+  ```bash
+  python tracker1.py
 - Di chuyển vào thư mục dự án:
 - Cài đặt các phụ thuộc:
   
