@@ -23,10 +23,11 @@ class PeerClient:
         self.message_queue = queue.Queue()
         self.channel_peers = {}
         self.server_socket = None
+        self.channel_id = None
         self.streaming = False
         self.stream_sockets = []
         self.stream_thread = None
-        self.video_queue = queue.Queue(maxsize=20)
+        self.video_queues = {}        #{channel_id: queue.Queue(maxsize=20)}
         self.audio_queue = queue.Queue(maxsize=50)
         self.audio_stream = None
         self.p = pyaudio.PyAudio()
@@ -103,7 +104,7 @@ class PeerClient:
                     if channel_id in self.hosted_channels:
                         if channel_id not in self.channel_peers:
                             self.channel_peers[channel_id] = []
-                        self.channel_peers[channel_id].append((peer_ip, peer_port))
+                        self.channel_peers[channel_id].append((peer_ip, int(peer_port)))
                 elif data.startswith("SEND_MESSAGE"):
                     _, channel_id, username, message = data.split(" ", 3)
                     if channel_id in self.joined_channels:
@@ -114,15 +115,16 @@ class PeerClient:
                         self.save_hosted_channels()
                     self.message_queue.put((channel_id, username, message))
                 elif data.startswith("STREAM_START"):
+                    _, self.channel_id = data.split()
                     print(f"Bắt đầu nhận stream từ {addr}")
-                    Thread(target=self.receive_stream, args=(conn,)).start()
+                    # Thread(target=self.receive_stream, args=(conn, channel_id)).start()
                     return  # Thoát để receive_stream xử lý dữ liệu binary tiếp theo
                 else:
                     conn.close()
             except UnicodeDecodeError:
                 # Nếu không decode được (dữ liệu binary), giả định là stream và chuyển sang receive_stream
                 print(f"Nhận dữ liệu binary từ {addr}, chuyển sang receive_stream")
-                Thread(target=self.receive_stream, args=(conn,)).start()
+                Thread(target=self.receive_stream, args=(conn, self.channel_id)).start()
                 return
         except Exception as e:
             print(f"Lỗi trong handle_incoming từ {addr}: {e}")
@@ -263,9 +265,13 @@ class PeerClient:
             if (peer_ip, int(peer_port)) != (self.peer_ip, self.peer_port):
                 try:
                     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    sock.settimeout(10)
                     sock.connect((peer_ip, int(peer_port)))
-                    sock.send("STREAM_START".encode())
+                    sock.send(f"STREAM_START {channel_id}".encode())
+                    sock.close()
+
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    # sock.settimeout(10)
+                    sock.connect((peer_ip, int(peer_port)))
                     self.stream_sockets.append(sock)
                     print(f"Kết nối stream tới {peer_ip}:{peer_port}")
                 except Exception as e:
@@ -280,10 +286,11 @@ class PeerClient:
                 print(f"Lỗi gửi tín hiệu khởi động đến {sock.getpeername()}: {e}")
                 self.stream_sockets.remove(sock)
 
-        self.stream_thread = Thread(target=self.send_stream)
+        self.stream_thread = Thread(target=self.send_stream, args=(channel_id,))
         self.stream_thread.start()
 
-    def stop_stream(self):
+    def stop_stream(self, channel_id):
+        self.channel_id = None
         self.streaming = False
         stop_signal = pickle.dumps(None)
         stop_packet = bytes([2]) + struct.pack("L", len(stop_signal)) + stop_signal
@@ -297,18 +304,21 @@ class PeerClient:
         self.stream_sockets = []
         if self.stream_thread:
             self.stream_thread.join()
-        while not self.video_queue.empty():
-            self.video_queue.get()
+        if channel_id in self.video_queues:
+            while not self.video_queues[channel_id].empty():
+                self.video_queues[channel_id].get()
+            # self.video_queues[channel_id].put(None)
+        del self.video_queues[channel_id]
         while not self.audio_queue.empty():
             self.audio_queue.get()
         if self.audio_stream:
             self.audio_stream.stop_stream()
             self.audio_stream.close()
             self.audio_stream = None
-        self.video_queue.put(None)
+        # self.video_queue.put(None)
         print("Stream đã dừng")
 
-    def send_stream(self):
+    def send_stream(self, channel_id):
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
             print("Lỗi: Không thể mở webcam")
@@ -326,8 +336,12 @@ class PeerClient:
             if not ret:
                 print("Lỗi: Không thể đọc frame từ webcam")
                 break
-            if not self.video_queue.full():
-                self.video_queue.put(frame)
+            # if not self.video_queue.full():
+            #     self.video_queue.put(frame)
+            if channel_id not in self.video_queues:
+                self.video_queues[channel_id] = queue.Queue(maxsize=20)
+            if not self.video_queues[channel_id].full():
+                self.video_queues[channel_id].put(frame)
             
             video_data = pickle.dumps(frame)
             video_packet = bytes([0]) + struct.pack("L", len(video_data)) + video_data
@@ -351,7 +365,7 @@ class PeerClient:
         audio_stream.close()
         print("Đã ngừng gửi stream")
 
-    def receive_stream(self, conn):
+    def receive_stream(self, conn, channel_id):
         data = b""
         header_size = 5
         conn.settimeout(10)
@@ -388,11 +402,13 @@ class PeerClient:
                 elif data_type == 2:
                     frame = pickle.loads(payload_data)
                     if frame is None:
-                        while not self.video_queue.empty():
-                            self.video_queue.get()
+                        if channel_id in self.video_queues:
+                            while not self.video_queues[channel_id].empty():
+                                self.video_queues[channel_id].get()
+                            self.video_queues[channel_id].put(None)
                         while not self.audio_queue.empty():
                             self.audio_queue.get()
-                        self.video_queue.put(None)
+                        # self.video_queues.put(None)
                         if self.audio_stream:
                             self.audio_stream.stop_stream()
                             self.audio_stream.close()
@@ -401,8 +417,10 @@ class PeerClient:
                         break
                 elif data_type == 0:
                     frame = pickle.loads(payload_data)
-                    if not self.video_queue.full():
-                        self.video_queue.put(frame)
+                    if channel_id not in self.video_queues:
+                        self.video_queues[channel_id] = queue.Queue(maxsize=20)
+                    if not self.video_queues[channel_id].full():
+                        self.video_queues[channel_id].put(frame)
                 elif data_type == 1:
                     audio_data = pickle.loads(payload_data)
                     if not self.audio_queue.full():
@@ -424,6 +442,7 @@ class PeerClient:
                 print(f"Lỗi nhận dữ liệu: {e}")
                 break
         conn.close()
+        del self.video_queues[channel_id]
         print("Đã ngừng nhận stream")
 
     def play_audio(self):

@@ -105,7 +105,8 @@ def handle_peer(conn, addr):
                 if channel_id in channel_data:
                     if channel_id not in channel_peers:
                         channel_peers[channel_id] = []
-                    channel_peers[channel_id].append((peer_ip, peer_port))
+                    channel_peers[channel_id].append((peer_ip, int(peer_port)))
+                    print(channel_peers) #aloooooooooooooo
                     broadcast_join_peer(channel_id)
                     history = " ".join([f"{t}:{a}:{m.replace(' ','_')}" for t, a, m in channel_data[channel_id]])
                     conn.send(f"CHANNEL_HISTORY {channel_id} {history}".encode())
@@ -147,6 +148,6 @@ def tracker_program(host, port):
         Thread(target=handle_peer, args=(conn, addr)).start()
 
 if __name__ == "__main__":
-    host = "192.168.227.241"
+    host = "192.168.1.8"
     port = 22236
     tracker_program(host, port)
