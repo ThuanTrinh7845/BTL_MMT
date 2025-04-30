@@ -18,7 +18,6 @@ class PeerClient:
         self.peer_ip = peer_ip
         self.peer_port = peer_port
         self.is_visitor = is_visitor
-        self.nick_name = username
         self.username = username
         self.password = password
         self.message_queue = queue.Queue()
@@ -86,7 +85,6 @@ class PeerClient:
             return self.joined_channels[channel_id][-1][0]
         return 0
 
-    # Hàm handle_incoming được sửa
     def handle_incoming(self, conn, addr):
         try:
             # Nhận dữ liệu thô (không decode ngay)
@@ -165,6 +163,41 @@ class PeerClient:
         except Exception as e:
             messagebox.showerror("Connection Error", f"Lỗi kết nối đến server: {e}")
             return None
+
+    def set_channel_privacy(self, channel_id, privacy):
+        """Gửi yêu cầu đến tracker để đặt trạng thái private/public"""
+        if channel_id not in self.hosted_channels:
+            return False
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((self.tracker_ip, self.tracker_port))
+            request = f"SET_CHANNEL_PRIVACY {channel_id} {privacy}"
+            sock.send(request.encode())
+            response = sock.recv(1024).decode()
+            sock.close()
+            return response == "SUCCESS"
+        except Exception as e:
+            print(f"Lỗi khi đặt trạng thái kênh: {e}")
+            return False
+        
+    def get_channel_privacy(self, channel_id):
+        """Lấy trạng thái private/public từ tracker"""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((self.tracker_ip, self.tracker_port))
+            request = f"GET_CHANNEL_PRIVACY {channel_id}"
+            sock.send(request.encode())
+            response = sock.recv(1024).decode()
+            sock.close()
+            return response  # "private" hoặc "public"
+        except Exception as e:
+            print(f"Lỗi khi lấy trạng thái kênh: {e}")
+            return "public"  # Mặc định public nếu lỗi
+
+    def can_visitor_view(self, channel_id):
+        """Kiểm tra xem visitor có được xem kênh không"""
+        privacy = self.get_channel_privacy(channel_id)
+        return privacy == "public"
 
     def create_channel(self, channel_id):
         try:
@@ -294,6 +327,7 @@ class PeerClient:
             if (peer_ip, int(peer_port)) != (self.peer_ip, self.peer_port):
                 try:
                     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(10)
                     sock.connect((peer_ip, int(peer_port)))
                     sock.send(f"STREAM_START {channel_id}".encode())
                     sock.close()
@@ -369,8 +403,6 @@ class PeerClient:
                 self.video_queues[channel_id] = queue.Queue(maxsize=20)
             if not self.video_queues[channel_id].full():
                 self.video_queues[channel_id].put(frame)
-            # if not self.video_queue.full():
-            #     self.video_queue.put(frame)
             
             video_data = pickle.dumps(frame)
             video_packet = bytes([0]) + struct.pack("L", len(video_data)) + video_data

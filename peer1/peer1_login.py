@@ -72,15 +72,32 @@ class Peer1LoginApp:
 
     def enter_visitor_mode(self):
         """Chuyển sang chế độ visitor"""
-        # Yêu cầu nhập nickname
-        nickname = tk.simpledialog.askstring("Visitor Mode", "Nhập nickname:", parent=self.root)
-        if nickname:
-            self.peer_client = PeerClient(self.server_ip, self.server_port, self.get_host_ip(), 33357, username=nickname, is_visitor=True)
-            self.peer_client.register_visitor_with_tracker(nickname)
-            self.root.destroy()
-            self.open_main_app(nickname, is_visitor=True)
-        else:
-            messagebox.showwarning("Lỗi", "Bạn cần nhập nickname để vào chế độ visitor!")
+        # Tạo cửa sổ Toplevel
+        nickname_window = tk.Toplevel(self.root)
+        nickname_window.title("Visitor Mode - Nhập Nickname")
+        nickname_window.geometry("250x150")
+        nickname_window.transient(self.root)  # Đặt cửa sổ phụ thuộc vào cửa sổ chính
+        nickname_window.grab_set()  # Chặn tương tác với cửa sổ chính
+
+        # Nhãn và ô nhập nickname
+        tk.Label(nickname_window, text="Nhập nickname:").pack(pady=10)
+        nickname_entry = tk.Entry(nickname_window)
+        nickname_entry.pack(pady=5)
+        nickname_entry.focus_set()  # Đặt con trỏ vào ô nhập
+
+        def confirm_nickname():
+            nickname = nickname_entry.get().strip()
+            if nickname:
+                self.peer_client = PeerClient(self.server_ip, self.server_port, self.get_host_ip(), 33357, username=nickname, is_visitor=True)
+                print(self.peer_client.register_visitor_with_tracker(nickname))
+                nickname_window.destroy()  # Đóng cửa sổ nhập nickname
+                self.root.destroy()
+                self.open_main_app(nickname, is_visitor=True)
+            else:
+                messagebox.showwarning("Lỗi", "Nickname không được để trống!", parent=nickname_window)
+
+        tk.Button(nickname_window, text="Confirm", command=confirm_nickname).pack(pady=10)
+        nickname_entry.bind("<Return>", lambda event: confirm_nickname())
 
     def open_main_app(self, username, is_visitor):
         from peer1_main_app import Peer1MainApp

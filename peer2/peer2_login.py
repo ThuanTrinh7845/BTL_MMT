@@ -32,7 +32,6 @@ class Peer2LoginApp:
         self.password_entry.pack(pady=5)
 
         tk.Button(self.root, text="Login", command=self.attempt_login).pack(pady=10)
-
         tk.Button(self.root, text="Register", command=self.attempt_register).pack(pady=10)
         tk.Button(self.root, text="Visitor Mode", command=self.enter_visitor_mode).pack(pady=10)
 
@@ -88,8 +87,8 @@ class Peer2LoginApp:
         def confirm_nickname():
             nickname = nickname_entry.get().strip()
             if nickname:
-                self.peer_client = PeerClient(self.server_ip, self.server_port, self.get_host_ip(), 33357, username=nickname, is_visitor=True)
-                self.peer_client.register_visitor_with_tracker(nickname)
+                self.peer_client = PeerClient(self.server_ip, self.server_port, self.get_host_ip(), 33358, username=nickname, is_visitor=True)
+                print(self.peer_client.register_visitor_with_tracker(nickname))
                 nickname_window.destroy()  # Đóng cửa sổ nhập nickname
                 self.root.destroy()
                 self.open_main_app(nickname, is_visitor=True)

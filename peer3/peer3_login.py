@@ -32,15 +32,15 @@ class Peer3LoginApp:
         self.password_entry.pack(pady=5)
 
         tk.Button(self.root, text="Login", command=self.attempt_login).pack(pady=10)
-
         tk.Button(self.root, text="Register", command=self.attempt_register).pack(pady=10)
+        tk.Button(self.root, text="Visitor Mode", command=self.enter_visitor_mode).pack(pady=10)
 
     def attempt_login(self):
         username = self.username_entry.get()
         password = self.password_entry.get()
 
         # Khởi tạo PeerClient cho peer1
-        self.peer_client = PeerClient(self.server_ip, self.server_port, self.get_host_ip(), 33359, username, password, "sid1")
+        self.peer_client = PeerClient(self.server_ip, self.server_port, self.get_host_ip(), 33359, username=username, password=password, is_visitor=False)
         response = self.peer_client.login_with_tracker(username, password)  # Đăng nhập với tracker
         print(response)
         if response == "Login successful":
@@ -55,7 +55,7 @@ class Peer3LoginApp:
         username = self.username_entry.get()
         password = self.password_entry.get()
 
-        self.peer_client = PeerClient(self.server_ip, self.server_port, self.get_host_ip(), 33359, username, password, "sid1")
+        self.peer_client = PeerClient(self.server_ip, self.server_port, self.get_host_ip(), 33359, username=username, password=password, is_visitor=False)
 
         # Gọi server để đăng ký
         response = self.peer_client.register_with_tracker(username, password)
@@ -69,10 +69,39 @@ class Peer3LoginApp:
             self.username_entry.delete(0, tk.END)
             self.password_entry.delete(0, tk.END)
 
-    def open_main_app(self, username):
+    def enter_visitor_mode(self):
+        """Chuyển sang chế độ visitor"""
+        # Tạo cửa sổ Toplevel
+        nickname_window = tk.Toplevel(self.root)
+        nickname_window.title("Visitor Mode - Nhập Nickname")
+        nickname_window.geometry("250x150")
+        nickname_window.transient(self.root)  # Đặt cửa sổ phụ thuộc vào cửa sổ chính
+        nickname_window.grab_set()  # Chặn tương tác với cửa sổ chính
+
+        # Nhãn và ô nhập nickname
+        tk.Label(nickname_window, text="Nhập nickname:").pack(pady=10)
+        nickname_entry = tk.Entry(nickname_window)
+        nickname_entry.pack(pady=5)
+        nickname_entry.focus_set()  # Đặt con trỏ vào ô nhập
+
+        def confirm_nickname():
+            nickname = nickname_entry.get().strip()
+            if nickname:
+                self.peer_client = PeerClient(self.server_ip, self.server_port, self.get_host_ip(), 33358, username=nickname, is_visitor=True)
+                print(self.peer_client.register_visitor_with_tracker(nickname))
+                nickname_window.destroy()  # Đóng cửa sổ nhập nickname
+                self.root.destroy()
+                self.open_main_app(nickname, is_visitor=True)
+            else:
+                messagebox.showwarning("Lỗi", "Nickname không được để trống!", parent=nickname_window)
+
+        tk.Button(nickname_window, text="Confirm", command=confirm_nickname).pack(pady=10)
+        nickname_entry.bind("<Return>", lambda event: confirm_nickname())
+
+    def open_main_app(self, username, is_visitor):
         from peer3_main_app import Peer3MainApp
         main_window = tk.Tk()
-        app = Peer3MainApp(main_window, username, self.peer_client)
+        app = Peer3MainApp(main_window, username, self.peer_client, is_visitor)
         main_window.mainloop()
 
 if __name__ == "__main__":

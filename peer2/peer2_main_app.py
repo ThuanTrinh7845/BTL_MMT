@@ -23,9 +23,6 @@ class Peer2MainApp:
 
         self.channel_frame = tk.Frame(self.root)
         self.channel_frame.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
-        if not self.is_visitor:
-            self.create_channel_button = tk.Button(self.channel_frame, text="Tạo kênh mới", command=self.create_new_channel)
-            self.create_channel_button.pack(side=tk.TOP, padx=10, pady=(0, 5))
 
         self.search_label = tk.Label(self.channel_frame, text="Tìm kiếm kênh:")
         self.search_label.pack(side=tk.TOP, anchor='w', padx=10)
@@ -44,6 +41,9 @@ class Peer2MainApp:
         self.video_label.pack(side=tk.TOP, padx=10, pady=10)
         self.video_label.pack_forget()  # Ẩn video label mặc định
         if not self.is_visitor:
+            self.create_channel_button = tk.Button(self.channel_frame, text="Tạo kênh mới", command=self.create_new_channel)
+            self.create_channel_button.pack(side=tk.TOP, padx=10, pady=(0, 5))
+
             self.sync_channel_list()
             
             self.message_frame = tk.Frame(self.root)
@@ -65,6 +65,13 @@ class Peer2MainApp:
 
             self.logout_button = tk.Button(self.root, text="Log out", command=self.logout)
             self.logout_button.place(x=600, y=10)
+
+            self.privacy_frame = tk.Frame(self.root)
+            self.privacy_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=(0, 5))
+
+            self.privacy_button = tk.Button(self.privacy_frame, text="Make Private", command=self.toggle_channel_privacy)
+            self.logout_button.place(side=tk.RIGHT)
+            self.privacy_button.pack_forget()
         else:
             self.logout_button = tk.Button(self.root, text="Log in", command=self.login)
             self.logout_button.place(x=600, y=10)
@@ -127,43 +134,62 @@ class Peer2MainApp:
         for channel_id in self.peer_client.joined_channels.keys():
             self.channel_listbox.insert(tk.END, channel_id)
 
+    def toggle_channel_privacy(self):
+        """Thay đổi trạng thái private/public của kênh"""
+        if self.current_channel and self.current_channel in self.peer_client.hosted_channels:
+            current_privacy = self.peer_client.get_channel_privacy(self.current_channel)
+            new_privacy = "private" if current_privacy == "public" else "public"
+            success = self.peer_client.set_channel_privacy(self.current_channel, new_privacy)
+            if success:
+                self.privacy_button.config(text=f"Make {'Private' if new_privacy == 'public' else 'Public'}")
+                messagebox.showinfo("Thành công", f"Kênh {self.current_channel} đã được đặt thành {new_privacy}!")
+            else:
+                messagebox.showerror("Lỗi", "Không thể thay đổi trạng thái kênh!")
+        else:
+            messagebox.showwarning("Lỗi", "Bạn không phải host của kênh này!")
+
     def on_channel_select(self, event):
         selected = self.channel_listbox.curselection()
         if selected:
             channel_id = self.channel_listbox.get(selected[0]).split()[0]
             self.current_channel = channel_id  # Cập nhật channel đang chọn
             if self.is_visitor:
-                self.display_channel_history(channel_id)
+                if not self.peer_client.can_visitor_view(channel_id):
+                    self.message_display.config(state='normal')
+                    self.message_display.delete(1.0, tk.END)
+                    self.message_display.insert(tk.END, f"Kênh {channel_id} không cho phép visitor xem.\n")
+                    self.message_display.config(state='disabled')
+                    self.video_label.pack_forget()
+                    return
+                else:
+                    self.display_channel_history(channel_id)
             elif channel_id in self.peer_client.joined_channels or channel_id in self.peer_client.hosted_channels:
                 self.display_channel_history(channel_id)
                 self.message_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
                 self.send_button.pack(side=tk.RIGHT)
                 self.join_button.pack_forget()
-                # if channel_id in self.peer_client.hosted_channels:
                 self.stream_button.pack(side=tk.RIGHT)
-                # else:
-                #     self.stream_button.pack_forget()
-                
-                # Kiểm tra hiển thị video
-                # if channel_id == self.streaming_channel:  # Nếu là host và đang stream channel này
-                #     self.video_label.pack(side=tk.TOP, padx=10, pady=10)
-                #     # print(f"Hiển thị video vì đang stream trên {channel_id}")
-                # elif channel_id in self.peer_client.joined_channels:  # Nếu là joiner và channel đã tham gia
-                #     self.video_label.pack(side=tk.TOP, padx=10, pady=10)
-                #     # print(f"Chuẩn bị nhận video từ {channel_id}")
-                # else:
-                #     self.video_label.pack_forget()
-                    # print(f"Ẩn video vì không stream/nhận trên {channel_id}")
+                if channel_id in self.peer_client.hosted_channels:
+                    # Hiển thị nút Toggle Privacy và cập nhật trạng thái
+                    current_privacy = self.peer_client.get_channel_privacy(channel_id)
+                    self.privacy_button.config(text=f"Make {'Private' if current_privacy == 'public' else 'Public'}")
+                    self.privacy_button.pack(side=tk.RIGHT)
+                else:
+                    self.privacy_button.pack_forget()
             else:
                 self.message_entry.pack_forget()
                 self.send_button.pack_forget()
                 self.join_button.pack(side=tk.RIGHT)
                 self.stream_button.pack_forget()
                 self.video_label.pack_forget()
-                self.message_display.config(state='normal')
-                self.message_display.delete(1.0, tk.END)
-                self.message_display.insert(tk.END, f"Kênh {channel_id} chưa tham gia.\n")
-                self.message_display.config(state='disabled')
+                self.privacy_button.pack_forget()
+                if not self.peer_client.can_visitor_view(channel_id):
+                    self.message_display.config(state='normal')
+                    self.message_display.delete(1.0, tk.END)
+                    self.message_display.insert(tk.END, f"Kênh {channel_id} riêng tư.\n")
+                    self.message_display.config(state='disabled')
+                else:
+                    self.display_channel_history(channel_id)
     def join_channel(self):
         selected = self.channel_listbox.curselection()
         if selected:
@@ -181,7 +207,7 @@ class Peer2MainApp:
         elif channel_id in self.peer_client.joined_channels:
             history = self.peer_client.joined_channels[channel_id]
         else:
-            return
+            history = self.peer_client.get_content_channel_id(channel_id)
         self.message_display.config(state='normal')
         self.message_display.delete(1.0, tk.END)
         for timestamp, author, content in history:
@@ -231,52 +257,6 @@ class Peer2MainApp:
                 print("Dừng stream")
 
     def update_video(self):
-        # if self.current_channel:
-        #     # Trường hợp host: Hiển thị video nếu đang stream trên channel này
-        #     if self.current_channel == self.streaming_channel:
-        #         try:
-        #             frame = self.peer_client.video_queues[self.current_channel].get_nowait()
-        #             if frame is None:
-        #                 self.video_label.pack_forget()
-        #                 print("Ẩn video label vì stream dừng (host)")
-        #             else:
-        #                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        #                 frame = cv2.resize(frame, (320, 240))
-        #                 img = Image.fromarray(frame)
-        #                 imgtk = ImageTk.PhotoImage(image=img)
-        #                 self.video_label.imgtk = imgtk
-        #                 self.video_label.configure(image=imgtk)
-        #                 if not self.video_label.winfo_ismapped():  # Nếu chưa hiển thị, hiển thị lại
-        #                     self.video_label.pack(side=tk.TOP, padx=10, pady=10)
-        #                 print("Hiển thị frame trên GUI (host)")
-        #         except queue.Empty:
-        #             pass
-        #     # Trường hợp joiner: Hiển thị video nếu channel đã tham gia
-        #     elif self.current_channel in self.peer_client.joined_channels:
-        #         try:
-        #             frame = self.peer_client.video_queues[self.current_channel].get_nowait()
-        #             if frame is None:
-        #                 self.video_label.pack_forget()
-        #                 print("Ẩn video label vì stream dừng (joiner)")
-        #             else:
-        #                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        #                 frame = cv2.resize(frame, (320, 240))
-        #                 img = Image.fromarray(frame)
-        #                 imgtk = ImageTk.PhotoImage(image=img)
-        #                 self.video_label.imgtk = imgtk
-        #                 self.video_label.configure(image=imgtk)
-        #                 if not self.video_label.winfo_ismapped():  # Nếu chưa hiển thị, hiển thị lại
-        #                     self.video_label.pack(side=tk.TOP, padx=10, pady=10)
-        #                 print("Hiển thị frame trên GUI (joiner)")
-        #         except queue.Empty:
-        #             pass
-        #     else:
-        #         self.video_label.pack_forget()
-        #         print(f"Ẩn video vì không stream/nhận trên {self.current_channel}")
-        # else:
-        #     self.video_label.pack_forget()  # Không có channel nào chọn
-        # self.root.after(10, self.update_video)
-
         if self.current_channel:
             queues = self.peer_client.video_queues.get(self.current_channel)
             if queues:

@@ -12,11 +12,12 @@ from PIL import Image, ImageTk
 import numpy as np
 
 class PeerClient:
-    def __init__(self, tracker_ip, tracker_port, peer_ip, peer_port, username, password):
+    def __init__(self, tracker_ip, tracker_port, peer_ip, peer_port, username=None, password=None, is_visitor=False):
         self.tracker_ip = tracker_ip
         self.tracker_port = tracker_port
         self.peer_ip = peer_ip
         self.peer_port = peer_port
+        self.is_visitor = is_visitor
         self.username = username
         self.password = password
         self.message_queue = queue.Queue()
@@ -84,7 +85,6 @@ class PeerClient:
             return self.joined_channels[channel_id][-1][0]
         return 0
 
-    # Hàm handle_incoming được sửa
     def handle_incoming(self, conn, addr):
         try:
             # Nhận dữ liệu thô (không decode ngay)
@@ -92,7 +92,6 @@ class PeerClient:
             if not raw_data:
                 conn.close()
                 return
-            
             # Thử decode dữ liệu thành UTF-8 để kiểm tra lệnh văn bản
             try:
                 data = raw_data.decode('utf-8').strip()
@@ -117,7 +116,6 @@ class PeerClient:
                     _, self.channel_id = data.split()
                     print(f"Bắt đầu nhận stream từ {addr}")
                     # Thread(target=self.receive_stream, args=(conn, self.channel_id)).start()
-                    return  # Thoát để receive_stream xử lý dữ liệu binary tiếp theo
                 else:
                     conn.close()
             except UnicodeDecodeError:
@@ -138,6 +136,14 @@ class PeerClient:
             conn, addr = self.server_socket.accept()
             Thread(target=self.handle_incoming, args=(conn, addr)).start()
 
+    def register_visitor_with_tracker(self, nickname):
+        tracker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        tracker.connect((self.tracker_ip, self.tracker_port))
+        tracker.send(f"VISITOR {self.peer_ip} {self.peer_port} {nickname}".encode())
+        response = tracker.recv(1024).decode()
+        tracker.close()
+        return response
+
     def register_with_tracker(self, username, password):
         tracker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         tracker.connect((self.tracker_ip, self.tracker_port))
@@ -157,6 +163,41 @@ class PeerClient:
         except Exception as e:
             messagebox.showerror("Connection Error", f"Lỗi kết nối đến server: {e}")
             return None
+    
+    def set_channel_privacy(self, channel_id, privacy):
+        """Gửi yêu cầu đến tracker để đặt trạng thái private/public"""
+        if channel_id not in self.hosted_channels:
+            return False
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((self.tracker_ip, self.tracker_port))
+            request = f"SET_CHANNEL_PRIVACY {channel_id} {privacy}"
+            sock.send(request.encode())
+            response = sock.recv(1024).decode()
+            sock.close()
+            return response == "SUCCESS"
+        except Exception as e:
+            print(f"Lỗi khi đặt trạng thái kênh: {e}")
+            return False
+
+    def get_channel_privacy(self, channel_id):
+        """Lấy trạng thái private/public từ tracker"""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((self.tracker_ip, self.tracker_port))
+            request = f"GET_CHANNEL_PRIVACY {channel_id}"
+            sock.send(request.encode())
+            response = sock.recv(1024).decode()
+            sock.close()
+            return response  # "private" hoặc "public"
+        except Exception as e:
+            print(f"Lỗi khi lấy trạng thái kênh: {e}")
+            return "public"  # Mặc định public nếu lỗi
+
+    def can_visitor_view(self, channel_id):
+        """Kiểm tra xem visitor có được xem kênh không"""
+        privacy = self.get_channel_privacy(channel_id)
+        return privacy == "public"
 
     def create_channel(self, channel_id):
         try:
@@ -193,6 +234,28 @@ class PeerClient:
             return []
         except Exception as e:
             print(f"Lỗi khi tìm kiếm kênh: {e}")
+            return []
+
+    def get_content_channel_id(self, channel_id):
+        try:
+            peer = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            peer.connect((self.tracker_ip, self.tracker_port))
+            peer.send(f"GET_MESSAGE {channel_id} {self.peer_ip} {self.peer_port}".encode())
+            history = peer.recv(1024).decode()
+            peer.close()
+            if history.startswith("CHANNEL_HISTORY"):
+                _, channel_id, messages_str = history.split(" ", 2)
+                channel_for_visitor = []
+                if messages_str:
+                    messages = messages_str.split(" ")
+                    for msg in messages:
+                        timestamp, author, content = msg.split(":")
+                        content = content.replace("_", " ")
+                        channel_for_visitor.append((int(timestamp), author, content))
+                return channel_for_visitor
+            return []
+        except Exception as e:
+            print(f"Lỗi khi lấy tin nhắn từ tracker: {e}")
             return []
 
     def join_channel(self, channel_id):
@@ -336,8 +399,6 @@ class PeerClient:
             if not ret:
                 print("Lỗi: Không thể đọc frame từ webcam")
                 break
-            # if not self.video_queue.full():
-            #     self.video_queue.put(frame)
             if channel_id not in self.video_queues:
                 self.video_queues[channel_id] = queue.Queue(maxsize=20)
             if not self.video_queues[channel_id].full():

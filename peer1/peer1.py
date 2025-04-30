@@ -18,7 +18,6 @@ class PeerClient:
         self.peer_ip = peer_ip
         self.peer_port = peer_port
         self.is_visitor = is_visitor
-        self.nick_name = username
         self.username = username
         self.password = password
         self.message_queue = queue.Queue()
@@ -168,10 +167,44 @@ class PeerClient:
             messagebox.showerror("Connection Error", f"Lỗi kết nối đến server: {e}")
             return None
 
+    def set_channel_privacy(self, channel_id, privacy):
+        """Gửi yêu cầu đến tracker để đặt trạng thái private/public"""
+        if channel_id not in self.hosted_channels:
+            return False
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((self.tracker_ip, self.tracker_port))
+            request = f"SET_CHANNEL_PRIVACY {channel_id} {privacy}"
+            sock.send(request.encode())
+            response = sock.recv(1024).decode()
+            sock.close()
+            return response == "SUCCESS"
+        except Exception as e:
+            print(f"Lỗi khi đặt trạng thái kênh: {e}")
+            return False
+        
+    def get_channel_privacy(self, channel_id):
+        """Lấy trạng thái private/public từ tracker"""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((self.tracker_ip, self.tracker_port))
+            request = f"GET_CHANNEL_PRIVACY {channel_id}"
+            sock.send(request.encode())
+            response = sock.recv(1024).decode()
+            sock.close()
+            return response  # "private" hoặc "public"
+        except Exception as e:
+            print(f"Lỗi khi lấy trạng thái kênh: {e}")
+            return "public"  # Mặc định public nếu lỗi
+
+    def can_visitor_view(self, channel_id):
+        """Kiểm tra xem visitor có được xem kênh không"""
+        privacy = self.get_channel_privacy(channel_id)
+        return privacy == "public"
+
     def create_channel(self, channel_id):
         try:
             peer = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            print(self.tracker_ip, self.tracker_port)
             peer.connect((self.tracker_ip, self.tracker_port))
             request = f"CREATE_CHANNEL {channel_id} {self.username}"
             print(f"Gửi yêu cầu tạo kênh: {request}")

@@ -7,10 +7,11 @@ import cv2
 from peer3_login import Peer3LoginApp
 
 class Peer3MainApp:
-    def __init__(self, root, username, peer_client):
+    def __init__(self, root, username, peer_client, is_visitor=False):
         self.root = root
         self.root.title("Peer3 - P2P Segment Chat")
         self.root.geometry("700x700")
+        self.is_visitor = is_visitor
         self.username = username
         self.peer_client = peer_client
         self.current_channel = None  # Biến để theo dõi channel đang chọn
@@ -23,9 +24,6 @@ class Peer3MainApp:
         self.channel_frame = tk.Frame(self.root)
         self.channel_frame.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
 
-        self.create_channel_button = tk.Button(self.channel_frame, text="Tạo kênh mới", command=self.create_new_channel)
-        self.create_channel_button.pack(side=tk.TOP, padx=10, pady=(0, 5))
-
         self.search_label = tk.Label(self.channel_frame, text="Tìm kiếm kênh:")
         self.search_label.pack(side=tk.TOP, anchor='w', padx=10)
         self.search_entry = tk.Entry(self.channel_frame)
@@ -36,34 +34,47 @@ class Peer3MainApp:
         self.channel_listbox.pack(side=tk.TOP, fill=tk.Y, expand=True)
         self.channel_listbox.bind("<<ListboxSelect>>", self.on_channel_select)
 
-        self.sync_channel_list()
-
         self.message_display = scrolledtext.ScrolledText(self.root, wrap=tk.WORD, state='disabled')
         self.message_display.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         self.video_label = tk.Label(self.root)
         self.video_label.pack(side=tk.TOP, padx=10, pady=10)
         self.video_label.pack_forget()  # Ẩn video label mặc định
+        if not self.is_visitor:
+            self.create_channel_button = tk.Button(self.channel_frame, text="Tạo kênh mới", command=self.create_new_channel)
+            self.create_channel_button.pack(side=tk.TOP, padx=10, pady=(0, 5))
 
-        self.message_frame = tk.Frame(self.root)
-        self.message_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=10)
+            self.sync_channel_list()
 
-        self.message_entry = tk.Entry(self.message_frame)
-        self.message_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            self.message_frame = tk.Frame(self.root)
+            self.message_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=10)
 
-        self.send_button = tk.Button(self.message_frame, text="Send", command=self.send_message)
-        self.send_button.pack(side=tk.RIGHT)
+            self.message_entry = tk.Entry(self.message_frame)
+            self.message_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        self.join_button = tk.Button(self.message_frame, text="Tham gia kênh", command=self.join_channel)
-        self.join_button.pack(side=tk.RIGHT)
-        self.join_button.pack_forget()
+            self.send_button = tk.Button(self.message_frame, text="Send", command=self.send_message)
+            self.send_button.pack(side=tk.RIGHT)
 
-        self.stream_button = tk.Button(self.message_frame, text="Bắt đầu Stream", command=self.toggle_stream)
-        self.stream_button.pack(side=tk.RIGHT)
-        self.stream_button.pack_forget()
+            self.join_button = tk.Button(self.message_frame, text="Tham gia kênh", command=self.join_channel)
+            self.join_button.pack(side=tk.RIGHT)
+            self.join_button.pack_forget()
 
-        self.logout_button = tk.Button(self.root, text="Log out", command=self.logout)
-        self.logout_button.place(x=600, y=10)
+            self.stream_button = tk.Button(self.message_frame, text="Bắt đầu Stream", command=self.toggle_stream)
+            self.stream_button.pack(side=tk.RIGHT)
+            self.stream_button.pack_forget()
+
+            self.logout_button = tk.Button(self.root, text="Log out", command=self.logout)
+            self.logout_button.place(x=600, y=10)
+
+            self.privacy_frame = tk.Frame(self.root)
+            self.privacy_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=(0, 5))
+
+            self.privacy_button = tk.Button(self.privacy_frame, text="Make Private", command=self.toggle_channel_privacy)
+            self.logout_button.place(side=tk.RIGHT)
+            self.privacy_button.pack_forget()
+        else:
+            self.logout_button = tk.Button(self.root, text="Log in", command=self.login)
+            self.logout_button.place(x=600, y=10)
 
         self.check_queue()
         self.update_video()
@@ -72,7 +83,17 @@ class Peer3MainApp:
         self.current_channel = None   # Channel đang chọn
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-
+    
+    def login(self):
+        """Xử lý sự kiện khi nhấn nút Log out"""
+        if messagebox.askokcancel("Đăng nhập", "Bạn muốn đăng nhập?"):
+            if self.peer_client.streaming:
+                self.peer_client.stop_stream()
+            if self.peer_client.server_socket:
+                self.peer_client.server_socket.close()
+            self.root.destroy()
+            self.open_login_window()
+            
     def logout(self):
         """Xử lý sự kiện khi nhấn nút Log out"""
         if messagebox.askokcancel("Đăng xuất", "Bạn có chắc muốn đăng xuất?"):
@@ -103,7 +124,8 @@ class Peer3MainApp:
             for channel in channels:
                 self.channel_listbox.insert(tk.END, f"{channel}")
         else:
-            self.sync_channel_list()
+            if not self.is_visitor:
+                self.sync_channel_list()
 
     def sync_channel_list(self):
         self.channel_listbox.delete(0, tk.END)
@@ -112,30 +134,62 @@ class Peer3MainApp:
         for channel_id in self.peer_client.joined_channels.keys():
             self.channel_listbox.insert(tk.END, channel_id)
 
+    def toggle_channel_privacy(self):
+        """Thay đổi trạng thái private/public của kênh"""
+        if self.current_channel and self.current_channel in self.peer_client.hosted_channels:
+            current_privacy = self.peer_client.get_channel_privacy(self.current_channel)
+            new_privacy = "private" if current_privacy == "public" else "public"
+            success = self.peer_client.set_channel_privacy(self.current_channel, new_privacy)
+            if success:
+                self.privacy_button.config(text=f"Make {'Private' if new_privacy == 'public' else 'Public'}")
+                messagebox.showinfo("Thành công", f"Kênh {self.current_channel} đã được đặt thành {new_privacy}!")
+            else:
+                messagebox.showerror("Lỗi", "Không thể thay đổi trạng thái kênh!")
+        else:
+            messagebox.showwarning("Lỗi", "Bạn không phải host của kênh này!")
+
     def on_channel_select(self, event):
         selected = self.channel_listbox.curselection()
         if selected:
             channel_id = self.channel_listbox.get(selected[0]).split()[0]
             self.current_channel = channel_id  # Cập nhật channel đang chọn
-            if channel_id in self.peer_client.joined_channels or channel_id in self.peer_client.hosted_channels:
+            if self.is_visitor:
+                if not self.peer_client.can_visitor_view(channel_id):
+                    self.message_display.config(state='normal')
+                    self.message_display.delete(1.0, tk.END)
+                    self.message_display.insert(tk.END, f"Kênh {channel_id} không cho phép visitor xem.\n")
+                    self.message_display.config(state='disabled')
+                    self.video_label.pack_forget()
+                    return
+                else:
+                    self.display_channel_history(channel_id)
+            elif channel_id in self.peer_client.joined_channels or channel_id in self.peer_client.hosted_channels:
                 self.display_channel_history(channel_id)
                 self.message_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
                 self.send_button.pack(side=tk.RIGHT)
                 self.join_button.pack_forget()
+                self.stream_button.pack(side=tk.RIGHT)
                 if channel_id in self.peer_client.hosted_channels:
-                    self.stream_button.pack(side=tk.RIGHT)
+                    # Hiển thị nút Toggle Privacy và cập nhật trạng thái
+                    current_privacy = self.peer_client.get_channel_privacy(channel_id)
+                    self.privacy_button.config(text=f"Make {'Private' if current_privacy == 'public' else 'Public'}")
+                    self.privacy_button.pack(side=tk.RIGHT)
                 else:
-                    self.stream_button.pack_forget()
+                    self.privacy_button.pack_forget()
             else:
                 self.message_entry.pack_forget()
                 self.send_button.pack_forget()
                 self.join_button.pack(side=tk.RIGHT)
                 self.stream_button.pack_forget()
                 self.video_label.pack_forget()
-                self.message_display.config(state='normal')
-                self.message_display.delete(1.0, tk.END)
-                self.message_display.insert(tk.END, f"Kênh {channel_id} chưa tham gia.\n")
-                self.message_display.config(state='disabled')
+                self.privacy_button.pack_forget()
+                if not self.peer_client.can_visitor_view(channel_id):
+                    self.message_display.config(state='normal')
+                    self.message_display.delete(1.0, tk.END)
+                    self.message_display.insert(tk.END, f"Kênh {channel_id} riêng tư.\n")
+                    self.message_display.config(state='disabled')
+                else:
+                    self.display_channel_history(channel_id)
     def join_channel(self):
         selected = self.channel_listbox.curselection()
         if selected:
@@ -146,12 +200,14 @@ class Peer3MainApp:
                 self.on_channel_select(None)
 
     def display_channel_history(self, channel_id):
-        if channel_id in self.peer_client.hosted_channels:
+        if self.is_visitor:
+            history = self.peer_client.get_content_channel_id(channel_id)
+        elif channel_id in self.peer_client.hosted_channels:
             history = self.peer_client.hosted_channels[channel_id]
         elif channel_id in self.peer_client.joined_channels:
             history = self.peer_client.joined_channels[channel_id]
         else:
-            return
+            history = self.peer_client.get_content_channel_id(channel_id)
         self.message_display.config(state='normal')
         self.message_display.delete(1.0, tk.END)
         for timestamp, author, content in history:

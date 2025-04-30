@@ -9,6 +9,7 @@ channel_hosting = {}
 channel_data = {}
 channel_peers = {}
 visitor = []
+privacy_channel = {}
 
 def get_host_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -61,37 +62,38 @@ def handle_peer(conn, addr):
     while True:
         try:
             data = conn.recv(1024).decode().strip()
-            if data.startswith("LOGIN"):
-                _, username, password = data.split()
-                if username in users and users[username] == password:
-                    conn.send("Login successful".encode("utf-8"))
+            if data.startswith("SET_CHANNEL_PRIVACY"):
+                _, channel_id, privacy = data.split(" ", 2)
+                if channel_id in privacy_channel:
+                    privacy_channel[channel_id] = (privacy == "private")
+                    conn.send("SUCCESS".encode())
                 else:
-                    conn.send("Login failed".encode("utf-8"))
-            elif data.startswith("REGISTER"):
-                _, ip, port, username, password = data.split()
-                if username in users:
-                    conn.send("Register failed: Username already exists".encode("utf-8"))
-                else:
-                    users[username] = password
-                    save_users(users)
-                    peer_list.append((ip, port, username))
-                    conn.send("Register successful".encode())
-            elif data.startwith("VISITOR"):
+                    conn.send("FAIL".encode())
+            elif data.startswith("GET_CHANNEL_PRIVACY"):
+                _, channel_id = data.split(" ", 1)
+                is_private = privacy_channel[channel_id]
+                conn.send(("private" if is_private else "public").encode())
+            elif data.startswith("VISITOR"):
                 _, ip, port, nickname = data.split()
+                print(ip, port, nickname) ##################3
                 visitor.append((ip, port, nickname))
                 conn.send("visitor".encode())
+            elif data.startswith("GET_MESSAGE"):
+                _, channel_id, id, port = data.split()
+                if channel_id in channel_data:
+                    history = " ".join([f"{t}:{a}:{m.replace(' ','_')}" for t, a, m in channel_data[channel_id]])
+                    conn.send(f"CHANNEL_HISTORY {channel_id} {history}".encode())   
             elif data.startswith("GET_PEER_LIST"):
                 response = "PEER_LIST " + " ".join([f"{ip}:{port}:{user}" for ip, port, user in peer_list])
                 conn.send(response.encode())
             elif data.startswith("CREATE_CHANNEL"):
                 _, channel_id, username = data.split()
-                print(channel_id, username)
                 hosting_peer = next((p for p in peer_list if p[2] == username), None)
-                print(hosting_peer)
                 if hosting_peer:
                     channel_hosting[channel_id] = [(hosting_peer[0], hosting_peer[1])]
                     channel_peers[channel_id] = [(hosting_peer[0], hosting_peer[1])]
                     channel_data[channel_id] = []
+                    privacy_channel[channel_id] = False
                     conn.send("CHANNEL_CREATED".encode())
                 else:
                     conn.send("CHANNEL_CREATE_FAIL".encode())
@@ -140,6 +142,21 @@ def handle_peer(conn, addr):
                     conn.send(f"CHANNEL_PEERS {channel_id} {peers_str}".encode())
                 else:
                     conn.send(f"NO_PEERS_FOUND {channel_id}".encode())
+            elif data.startswith("LOGIN"):
+                _, username, password = data.split()
+                if username in users and users[username] == password:
+                    conn.send("Login successful".encode("utf-8"))
+                else:
+                    conn.send("Login failed".encode("utf-8"))
+            elif data.startswith("REGISTER"):
+                _, ip, port, username, password = data.split()
+                if username in users:
+                    conn.send("Register failed: Username already exists".encode("utf-8"))
+                else:
+                    users[username] = password
+                    save_users(users)
+                    peer_list.append((ip, port, username))
+                    conn.send("Register successful".encode())
         except Exception:
             conn.close()
             break
