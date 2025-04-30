@@ -47,7 +47,7 @@ class Peer3LoginApp:
             threading.Thread(target=self.peer_client.start).start()
             messagebox.showinfo("Login Success", "Đăng nhập thành công!")
             self.root.destroy()
-            self.open_main_app(username)
+            self.open_main_app(username, is_visitor=False)
         else:
             messagebox.showerror("Login Failed", "Tên đăng nhập hoặc mật khẩu không đúng!")
 
