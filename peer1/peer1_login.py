@@ -11,7 +11,7 @@ class Peer1LoginApp:
         self.root.geometry("300x200")
 
         # Cấu hình server (tracker)
-        self.server_ip = "192.168.1.8"  # Địa chỉ IP của tracker
+        self.server_ip = "192.168.1.2"  # Địa chỉ IP của tracker
         self.server_port = 22236     # Cổng của tracker
 
         self.peer_client = None
@@ -34,20 +34,21 @@ class Peer1LoginApp:
         tk.Button(self.root, text="Login", command=self.attempt_login).pack(pady=10)
 
         tk.Button(self.root, text="Register", command=self.attempt_register).pack(pady=10)
+        tk.Button(self.root, text="Visitor Mode", command=self.enter_visitor_mode).pack(pady=10)
 
     def attempt_login(self):
         username = self.username_entry.get()
         password = self.password_entry.get()
 
         # Khởi tạo PeerClient cho peer1
-        self.peer_client = PeerClient(self.server_ip, self.server_port, self.get_host_ip(), 33357, username, password, "sid1")
+        self.peer_client = PeerClient(self.server_ip, self.server_port, self.get_host_ip(), 33357, username=username, password=password, is_visitor=False)
         response = self.peer_client.login_with_tracker(username, password)  # Đăng nhập với tracker
         print(response)
         if response == "Login successful":
             threading.Thread(target=self.peer_client.start).start()
             messagebox.showinfo("Login Success", "Đăng nhập thành công!")
             self.root.destroy()
-            self.open_main_app(username)
+            self.open_main_app(username, is_visitor=False)
         else:
             messagebox.showerror("Login Failed", "Tên đăng nhập hoặc mật khẩu không đúng!")
 
@@ -55,7 +56,7 @@ class Peer1LoginApp:
         username = self.username_entry.get()
         password = self.password_entry.get()
 
-        self.peer_client = PeerClient(self.server_ip, self.server_port, self.get_host_ip(), 33357, username, password, "sid1")
+        self.peer_client = PeerClient(self.server_ip, self.server_port, self.get_host_ip(), 33357, username=username, password=password, is_visitor=False)
 
         # Gọi server để đăng ký
         response = self.peer_client.register_with_tracker(username, password)
@@ -69,10 +70,22 @@ class Peer1LoginApp:
             self.username_entry.delete(0, tk.END)
             self.password_entry.delete(0, tk.END)
 
-    def open_main_app(self, username):
+    def enter_visitor_mode(self):
+        """Chuyển sang chế độ visitor"""
+        # Yêu cầu nhập nickname
+        nickname = tk.simpledialog.askstring("Visitor Mode", "Nhập nickname:", parent=self.root)
+        if nickname:
+            self.peer_client = PeerClient(self.server_ip, self.server_port, self.get_host_ip(), 33357, username=nickname, is_visitor=True)
+            self.peer_client.register_visitor_with_tracker(nickname)
+            self.root.destroy()
+            self.open_main_app(nickname, is_visitor=True)
+        else:
+            messagebox.showwarning("Lỗi", "Bạn cần nhập nickname để vào chế độ visitor!")
+
+    def open_main_app(self, username, is_visitor):
         from peer1_main_app import Peer1MainApp
         main_window = tk.Tk()
-        app = Peer1MainApp(main_window, username, self.peer_client)
+        app = Peer1MainApp(main_window, username, self.peer_client, is_visitor)
         main_window.mainloop()
 
 if __name__ == "__main__":

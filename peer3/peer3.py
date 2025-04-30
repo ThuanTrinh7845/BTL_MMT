@@ -12,14 +12,13 @@ from PIL import Image, ImageTk
 import numpy as np
 
 class PeerClient:
-    def __init__(self, tracker_ip, tracker_port, peer_ip, peer_port, username, password, session_id):
+    def __init__(self, tracker_ip, tracker_port, peer_ip, peer_port, username, password):
         self.tracker_ip = tracker_ip
         self.tracker_port = tracker_port
         self.peer_ip = peer_ip
         self.peer_port = peer_port
         self.username = username
         self.password = password
-        self.session_id = session_id
         self.message_queue = queue.Queue()
         self.channel_peers = {}
         self.server_socket = None
@@ -142,7 +141,7 @@ class PeerClient:
     def register_with_tracker(self, username, password):
         tracker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         tracker.connect((self.tracker_ip, self.tracker_port))
-        tracker.send(f"REGISTER {self.peer_ip} {self.peer_port} {username} {password} {self.session_id}".encode())
+        tracker.send(f"REGISTER {self.peer_ip} {self.peer_port} {username} {password}".encode())
         response = tracker.recv(1024).decode()
         tracker.close()
         return response
@@ -163,7 +162,7 @@ class PeerClient:
         try:
             peer = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             peer.connect((self.tracker_ip, self.tracker_port))
-            request = f"CREATE_CHANNEL {channel_id} {self.username} {self.session_id}"
+            request = f"CREATE_CHANNEL {channel_id} {self.username}"
             print(f"Gửi yêu cầu tạo kênh: {request}")
             peer.send(request.encode())
             response = peer.recv(1024).decode()

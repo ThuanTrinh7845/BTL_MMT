@@ -8,6 +8,7 @@ peer_list = []
 channel_hosting = {}
 channel_data = {}
 channel_peers = {}
+visitor = []
 
 def get_host_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -67,20 +68,26 @@ def handle_peer(conn, addr):
                 else:
                     conn.send("Login failed".encode("utf-8"))
             elif data.startswith("REGISTER"):
-                _, ip, port, username, password, session_id = data.split()
+                _, ip, port, username, password = data.split()
                 if username in users:
                     conn.send("Register failed: Username already exists".encode("utf-8"))
                 else:
                     users[username] = password
                     save_users(users)
-                    peer_list.append((ip, port, username, session_id))
+                    peer_list.append((ip, port, username))
                     conn.send("Register successful".encode())
+            elif data.startwith("VISITOR"):
+                _, ip, port, nickname = data.split()
+                visitor.append((ip, port, nickname))
+                conn.send("visitor".encode())
             elif data.startswith("GET_PEER_LIST"):
-                response = "PEER_LIST " + " ".join([f"{ip}:{port}:{user}:{sid}" for ip, port, user, sid in peer_list])
+                response = "PEER_LIST " + " ".join([f"{ip}:{port}:{user}" for ip, port, user in peer_list])
                 conn.send(response.encode())
             elif data.startswith("CREATE_CHANNEL"):
-                _, channel_id, username, session_id = data.split()
-                hosting_peer = next((p for p in peer_list if p[2] == username and p[3] == session_id), None)
+                _, channel_id, username = data.split()
+                print(channel_id, username)
+                hosting_peer = next((p for p in peer_list if p[2] == username), None)
+                print(hosting_peer)
                 if hosting_peer:
                     channel_hosting[channel_id] = [(hosting_peer[0], hosting_peer[1])]
                     channel_peers[channel_id] = [(hosting_peer[0], hosting_peer[1])]
@@ -148,6 +155,6 @@ def tracker_program(host, port):
         Thread(target=handle_peer, args=(conn, addr)).start()
 
 if __name__ == "__main__":
-    host = "192.168.1.8"
+    host = "192.168.1.2"
     port = 22236
     tracker_program(host, port)

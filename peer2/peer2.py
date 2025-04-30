@@ -12,14 +12,15 @@ from PIL import Image, ImageTk
 import numpy as np
 
 class PeerClient:
-    def __init__(self, tracker_ip, tracker_port, peer_ip, peer_port, username, password, session_id):
+    def __init__(self, tracker_ip, tracker_port, peer_ip, peer_port, username=None, password=None, is_visitor=False):
         self.tracker_ip = tracker_ip
         self.tracker_port = tracker_port
         self.peer_ip = peer_ip
         self.peer_port = peer_port
+        self.is_visitor = is_visitor
+        self.nick_name = username
         self.username = username
         self.password = password
-        self.session_id = session_id
         self.message_queue = queue.Queue()
         self.channel_peers = {}
         self.server_socket = None
@@ -137,10 +138,18 @@ class PeerClient:
             conn, addr = self.server_socket.accept()
             Thread(target=self.handle_incoming, args=(conn, addr)).start()
 
+    def register_visitor_with_tracker(self, nickname):
+        tracker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        tracker.connect((self.tracker_ip, self.tracker_port))
+        tracker.send(f"VISITOR {self.peer_ip} {self.peer_port} {nickname}".encode())
+        response = tracker.recv(1024).decode()
+        tracker.close()
+        return response
+
     def register_with_tracker(self, username, password):
         tracker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         tracker.connect((self.tracker_ip, self.tracker_port))
-        tracker.send(f"REGISTER {self.peer_ip} {self.peer_port} {username} {password} {self.session_id}".encode())
+        tracker.send(f"REGISTER {self.peer_ip} {self.peer_port} {username} {password}".encode())
         response = tracker.recv(1024).decode()
         tracker.close()
         return response
@@ -161,7 +170,7 @@ class PeerClient:
         try:
             peer = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             peer.connect((self.tracker_ip, self.tracker_port))
-            request = f"CREATE_CHANNEL {channel_id} {self.username} {self.session_id}"
+            request = f"CREATE_CHANNEL {channel_id} {self.username}"
             print(f"Gửi yêu cầu tạo kênh: {request}")
             peer.send(request.encode())
             response = peer.recv(1024).decode()
@@ -192,6 +201,28 @@ class PeerClient:
             return []
         except Exception as e:
             print(f"Lỗi khi tìm kiếm kênh: {e}")
+            return []
+        
+    def get_content_channel_id(self, channel_id):
+        try:
+            peer = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            peer.connect((self.tracker_ip, self.tracker_port))
+            peer.send(f"GET_MESSAGE {channel_id} {self.peer_ip} {self.peer_port}".encode())
+            history = peer.recv(1024).decode()
+            peer.close()
+            if history.startswith("CHANNEL_HISTORY"):
+                _, channel_id, messages_str = history.split(" ", 2)
+                channel_for_visitor = []
+                if messages_str:
+                    messages = messages_str.split(" ")
+                    for msg in messages:
+                        timestamp, author, content = msg.split(":")
+                        content = content.replace("_", " ")
+                        channel_for_visitor.append((int(timestamp), author, content))
+                return channel_for_visitor
+            return []
+        except Exception as e:
+            print(f"Lỗi khi lấy tin nhắn từ tracker: {e}")
             return []
 
     def join_channel(self, channel_id):
