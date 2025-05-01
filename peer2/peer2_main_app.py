@@ -80,7 +80,6 @@ class Peer2MainApp:
             self.privacy_button.pack(side=tk.LEFT)
             self.privacy_button.pack_forget()
         else:
-            self.view_stream_button.pack(side=tk.RIGHT)
             self.logout_button = tk.Button(self.root, text="Log in", command=self.login)
             self.logout_button.place(x=600, y=10)
 
