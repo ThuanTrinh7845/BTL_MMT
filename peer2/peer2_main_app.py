@@ -112,7 +112,7 @@ class Peer2MainApp:
             self.open_login_window()
 
     def open_login_window(self):
-        """Mở lại giao diện đăng nhập từ peer1_login.py"""
+        """Mở lại giao diện đăng nhập từ peer2_login.py"""
         login_root = tk.Tk()
         login_app = Peer2LoginApp(login_root)
         login_root.mainloop()
